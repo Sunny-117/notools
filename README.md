@@ -34,3 +34,25 @@ const deletedFiles = await deleteFilesByPattern({
 
 console.log('已删除的文件:', deletedFiles);
 ```
+
+---
+
+### `deleteEmptyDirs(targetDir: string, recursive?: boolean): Promise<string[]>`
+
+该函数用于删除指定目录下所有的空文件夹，并返回已删除的空文件夹路径列表。可以选择是否递归删除子目录中的空文件夹。
+
+#### 参数
+
+- **`targetDir: string`** (必填): 要删除空文件夹的目标目录路径。
+- **`recursive: boolean`** (可选): 是否递归删除子目录中的空文件夹。默认为 `false`，即只删除目标目录下的空文件夹，不删除子目录中的空文件夹。如果设置为 `true`，会递归删除子目录中的空文件夹。
+
+#### 返回值
+
+- 返回一个 `Promise`，解析为已删除空文件夹路径的字符串数组。
+
+#### 示例
+
+```ts
+const deletedDirs = await deleteEmptyDirs('/path/to/your/directory', true);
+console.log('已删除的空文件夹:', deletedDirs);
+```
