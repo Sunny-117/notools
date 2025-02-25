@@ -1,53 +1,78 @@
 import axios from "axios";
 import fs from "fs";
-import { exec } from "child_process";
+import path from "path";
+import { execSync } from "child_process";
 
-export function autoPullRepository({
-  username,
-  giteeToken,
-}: {
+interface RepoConfig {
   username: string;
-  giteeToken: string;
-}): void {
-  const cloneDirectory = `./cloned2/${username}`;
+  token: string;
+  platform: "github" | "gitee";
+  cloneDir?: string;
+}
 
-  if (!fs.existsSync(cloneDirectory)) {
-    fs.mkdirSync(cloneDirectory, { recursive: true });
+export function autoPullRepository(config: RepoConfig): void {
+  const { username, token, platform, cloneDir } = config;
+  const BASE_DIR = path.join(process.cwd(), cloneDir || "cloned_repos", username);
+  
+  // 创建基础目录
+  if (!fs.existsSync(BASE_DIR)) {
+    fs.mkdirSync(BASE_DIR, { recursive: true });
   }
 
-  const config = {
-    method: "get",
-    maxBodyLength: Infinity,
-    url: `https://gitee.com/api/v5/users/${username}/repos?access_token=${giteeToken}&type=all&sort=created&page=1&per_page=100`,
-    headers: {
-      "Content-Type": "application/json;charset=UTF-8",
+  // 配置平台参数
+  const PLATFORM_CONFIG = {
+    github: {
+      apiUrl: `https://api.github.com/users/${username}/repos`,
+      authHeader: `token ${token}`,
+      cloneUrl: (repo: string) => `https://${username}:${token}@github.com/${username}/${repo}.git`
     },
+    gitee: {
+      apiUrl: `https://gitee.com/api/v5/users/${username}/repos?access_token=${token}`,
+      authHeader: "",
+      cloneUrl: (repo: string) => `https://${username}:${token}@gitee.com/${username}/${repo}.git`
+    }
   };
 
-  axios(config)
-    .then(function (response) {
-      const data = response.data;
-      fs.writeFileSync("./data.json", JSON.stringify(data), "utf-8");
+  const { apiUrl, authHeader, cloneUrl } = PLATFORM_CONFIG[platform];
 
-      data.forEach((item: any) => {
-        // 构建克隆命令，指定目标目录
-        const cloneCommand = `git clone ${item.html_url} ${cloneDirectory}/${item.name}`;
-        exec(cloneCommand, (error, stdout, stderr) => {
-          if (error) {
-            console.error(`克隆 ${item.name} 时出错: ${error.message}`);
-            return;
-          }
-          if (stderr) {
-            console.error(`克隆 ${item.name} 时出现警告: ${stderr}`);
-            return;
-          }
-          console.log(
-            `成功克隆 ${item.name} 到 ${cloneDirectory}/${item.name}`
-          );
-        });
-      });
-    })
-    .catch(function (error) {
-      console.log(error);
+  // 获取仓库列表
+  axios({
+    method: "get",
+    url: apiUrl,
+    headers: {
+      "User-Agent": "Node.js",
+      "Accept": "application/vnd.github.v3+json",
+      "Authorization": authHeader
+    }
+  })
+  .then(response => {
+    const repos = response.data;
+    console.log(`\nFound ${repos.length} repositories on ${platform}`);
+    console.log(`Cloning to: ${BASE_DIR}\n`);
+
+    // 带进度条的克隆流程
+    repos.forEach((repo: any, index: number) => {
+      const repoName = repo.name || repo.full_name.split('/')[1];
+      const repoPath = path.join(BASE_DIR, repoName);
+      const progress = `[${index + 1}/${repos.length}]`;
+
+      try {
+        console.log(`${progress} Processing ${repoName}`);
+        
+        if (fs.existsSync(repoPath)) {
+          console.log(`  ↳ Updating repository...`);
+          execSync("git pull", { cwd: repoPath });
+          console.log(`  ✓ Updated successfully\n`);
+        } else {
+          execSync(`git clone ${cloneUrl(repoName)} ${repoPath}`);
+          console.log(`  ✓ Cloned successfully\n`);
+        }
+      } catch (error: any) {
+        console.error(`  ✗ Error: ${error.message}\n`);
+      }
     });
+  })
+  .catch(error => {
+    console.error(`Failed to fetch repositories: ${error.message}`);
+  });
 }
