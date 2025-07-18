@@ -1,4 +1,5 @@
 import fs from "fs";
+import fsp from "node:fs/promises";
 import path from "path";
 import { glob } from "glob";
 import consola from "consola";
@@ -96,4 +97,29 @@ export async function deleteEmptyDirs(
 
   consola.success(`成功删除了 ${deletedDirs.length} 个空文件夹:`, deletedDirs);
   return deletedDirs;
+}
+
+// fork from vite
+// vitejs/vite#610 when hot-reloading Vue files, we read immediately on file
+// change event and sometimes this can be too early and get an empty buffer.
+// Poll until the file's modified time has changed before reading again.
+// 有些操作系统编辑器中，保存的时候 会触发文件的change事件，但并不意味着编辑器已经把文件内容已经写完了
+// 这样确保调用read的时候可以读到已经更新过的内容
+export async function readModifiedFile(file: string): Promise<string> {
+  const content = await fsp.readFile(file, "utf-8");
+  if (!content) {
+    const mtime = (await fsp.stat(file)).mtimeMs;
+
+    for (let n = 0; n < 10; n++) {
+      await new Promise((r) => setTimeout(r, 10));
+      const newMtime = (await fsp.stat(file)).mtimeMs;
+      if (newMtime !== mtime) {
+        break;
+      }
+    }
+
+    return await fsp.readFile(file, "utf-8");
+  } else {
+    return content;
+  }
 }
