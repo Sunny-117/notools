@@ -9,7 +9,7 @@ export default defineConfig({
   entry,
   format: ["cjs", "esm"],
   // splitting: true,
-  cjsInterop: true,
+  // cjsInterop: true,
   clean: true,
   dts: true,
   platform: "node",
