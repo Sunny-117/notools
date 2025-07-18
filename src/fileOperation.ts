@@ -105,6 +105,16 @@ export async function deleteEmptyDirs(
 // Poll until the file's modified time has changed before reading again.
 // 有些操作系统编辑器中，保存的时候 会触发文件的change事件，但并不意味着编辑器已经把文件内容已经写完了
 // 这样确保调用read的时候可以读到已经更新过的内容
+// 处理文件修改后的读取问题,特别是为了解决一些文件系统的竞态条件。让我解释一下它的工作原理:
+// ● 首先尝试读取文件内容:const content = await fsp.readFile(file, "utf-8");
+// ● 如果读取到内容,直接返回内容。但如果读不到内容(content 为空),则进入特殊处理流程:
+
+// ● 在某些文件系统中,当文件正在被写入时,可能会出现短暂的"空文件"状态
+// ● 通过检查文件修改时间的变化,可以等待文件写入完成
+// ● 最多等待10次(每次10ms),总共不超过100ms,避免无限等待
+// ● 如果在这期间检测到文件修改时间发生变化,说明文件写入可能已完成,就立即尝试重新读取
+// 这种机制主要用于处理热更新(HMR)场景,确保能正确读取到最新修改的文件内容,避免读取到不完整或错误的文件内容。
+// 这是一个"重试机制",用于处理文件系统的异步性和竞态条件,提高文件读取的可靠性。
 export async function readModifiedFile(file: string): Promise<string> {
   const content = await fsp.readFile(file, "utf-8");
   if (!content) {
