@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "scripts": {
-    "build": "tsup",
+    "build": "tsdown",
     "release": "bumpp && pnpm publish",
     "prepublishOnly": "pnpm run build"
   },
@@ -16,7 +16,7 @@
     "@types/node": "^22.13.4",
     "bumpp": "^10.0.3",
     "tslib": "^2.8.1",
-    "tsup": "^8.3.6",
+    "tsdown": "^0.12.9",
     "typescript": "^5.7.3"
   },
   "dependencies": {
