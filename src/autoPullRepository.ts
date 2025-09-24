@@ -12,8 +12,8 @@ interface RepoConfig {
 
 export function autoPullRepository(config: RepoConfig): void {
   const { username, token, platform, cloneDir } = config;
-  const BASE_DIR = path.join(process.cwd(), cloneDir || "cloned_repos", username);
-  
+  const BASE_DIR = path.join(cloneDir || "cloned_repos", username);
+
   // 创建基础目录
   if (!fs.existsSync(BASE_DIR)) {
     fs.mkdirSync(BASE_DIR, { recursive: true });
@@ -45,34 +45,34 @@ export function autoPullRepository(config: RepoConfig): void {
       "Authorization": authHeader
     }
   })
-  .then(response => {
-    const repos = response.data;
-    console.log(`\nFound ${repos.length} repositories on ${platform}`);
-    console.log(`Cloning to: ${BASE_DIR}\n`);
+    .then(response => {
+      const repos = response.data;
+      console.log(`\nFound ${repos.length} repositories on ${platform}`);
+      console.log(`Cloning to: ${BASE_DIR}\n`);
 
-    // 带进度条的克隆流程
-    repos.forEach((repo: any, index: number) => {
-      const repoName = repo.name || repo.full_name.split('/')[1];
-      const repoPath = path.join(BASE_DIR, repoName);
-      const progress = `[${index + 1}/${repos.length}]`;
+      // 带进度条的克隆流程
+      repos.forEach((repo: any, index: number) => {
+        const repoName = repo.name || repo.full_name.split('/')[1];
+        const repoPath = path.join(BASE_DIR, repoName);
+        const progress = `[${index + 1}/${repos.length}]`;
 
-      try {
-        console.log(`${progress} Processing ${repoName}`);
-        
-        if (fs.existsSync(repoPath)) {
-          console.log(`  ↳ Updating repository...`);
-          execSync("git pull", { cwd: repoPath });
-          console.log(`  ✓ Updated successfully\n`);
-        } else {
-          execSync(`git clone ${cloneUrl(repoName)} ${repoPath}`);
-          console.log(`  ✓ Cloned successfully\n`);
+        try {
+          console.log(`${progress} Processing ${repoName}`);
+
+          if (fs.existsSync(repoPath)) {
+            console.log(`  ↳ Updating repository...`);
+            execSync("git pull", { cwd: repoPath });
+            console.log(`  ✓ Updated successfully\n`);
+          } else {
+            execSync(`git clone ${cloneUrl(repoName)} ${repoPath}`);
+            console.log(`  ✓ Cloned successfully\n`);
+          }
+        } catch (error: any) {
+          console.error(`  ✗ Error: ${error.message}\n`);
         }
-      } catch (error: any) {
-        console.error(`  ✗ Error: ${error.message}\n`);
-      }
+      });
+    })
+    .catch(error => {
+      console.error(`Failed to fetch repositories: ${error.message}`);
     });
-  })
-  .catch(error => {
-    console.error(`Failed to fetch repositories: ${error.message}`);
-  });
 }
