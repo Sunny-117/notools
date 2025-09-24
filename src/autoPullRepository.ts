@@ -3,6 +3,10 @@ import fs, { writeFileSync } from "fs";
 import path from "path";
 import { exec } from "child_process";
 import util from "util";
+import dotenv from "dotenv";
+
+// 加载.env文件
+dotenv.config();
 
 // 如果要支持并发（例如 N 个同时执行）
 // 1. 用 execSync 会阻塞，换成异步的 exec（child_process 的 Promise 版本）。
@@ -12,7 +16,7 @@ const execAsync = util.promisify(exec);
 
 interface RepoConfig {
   username: string;
-  token: string;
+  token?: string; // 改为可选
   platform: "github" | "gitee";
   cloneDir?: string;
   concurrency?: number; // 新增：并发数，默认 5
@@ -69,7 +73,14 @@ async function fetchAllRepos(apiUrl: string, headers: any): Promise<any[]> {
 
 
 export async function autoPullRepository(config: RepoConfig): Promise<void> {
-  const { username, token, platform, cloneDir, concurrency = 5 } = config;
+  const { username, token: tokenFromConfig, platform, cloneDir, concurrency = 5 } = config;
+
+  // 优先使用配置中的token，如果没有则从.env文件读取
+  const token = tokenFromConfig || process.env.GIT_TOKEN;
+  if (!token) {
+    throw new Error('Git token is required. Please provide it in config or set GIT_TOKEN in .env file');
+  }
+
   const BASE_DIR = path.join(cloneDir || "cloned_repos", username);
 
   if (!fs.existsSync(BASE_DIR)) {

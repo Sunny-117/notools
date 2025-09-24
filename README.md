@@ -1,5 +1,16 @@
 # notools
 
+## 配置
+
+在项目根目录创建`.env`文件，添加以下内容：
+
+```bash
+# Git 访问令牌
+# GitHub: https://github.com/settings/tokens
+# Gitee: https://gitee.com/profile/personal_access_tokens
+GIT_TOKEN=your_token_here
+```
+
 ## Install
 
 ```bash
@@ -7,6 +18,32 @@ npm i notools
 ```
 
 ## API 文档
+
+### `autoPullRepository(config: RepoConfig): Promise<void>`
+
+该函数用于自动拉取或更新指定用户的Git仓库。
+
+#### 参数
+- **`config`**: `RepoConfig`
+  - **`username: string`**: Git用户名
+  - **`token?: string`**: 可选，Git访问令牌。如果不提供，会从`.env`文件的`GIT_TOKEN`变量读取
+  - **`platform: "github" | "gitee"`**: 代码平台
+  - **`cloneDir?: string`**: 可选，克隆目录路径，默认为`./cloned_repos`
+  - **`concurrency?: number`**: 可选，并发数，默认为5
+
+#### 示例
+```typescript
+import { autoPullRepository } from "notools";
+
+await autoPullRepository({
+  username: "your_username",
+  platform: "github",
+  cloneDir: "/path/to/clone",
+  concurrency: 10
+});
+```
+
+---
 
 ### `deleteFilesByPattern(options: DeleteFileOptions): Promise<string[]>`
 
