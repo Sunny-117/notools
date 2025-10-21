@@ -1,8 +1,8 @@
 import { autoPullRepository } from "../src";
 
 autoPullRepository({
-  username: "Sunny-117",
+  username: "bjmashibing",
   platform: 'github',
-  cloneDir: '/Users/olive/Desktop/github',
+  cloneDir: '/Users/olive/Desktop/code/msb/cc',
   concurrency: 30
 });

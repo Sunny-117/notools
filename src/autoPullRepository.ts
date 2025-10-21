@@ -1,8 +1,7 @@
 import axios from "axios";
 import fs, { writeFileSync } from "fs";
 import path from "path";
-import { exec } from "child_process";
-import util from "util";
+import { spawn } from "child_process";
 import dotenv from "dotenv";
 
 // 加载.env文件
@@ -12,7 +11,80 @@ dotenv.config();
 // 1. 用 execSync 会阻塞，换成异步的 exec（child_process 的 Promise 版本）。
 // 2. 使用一个「并发控制器」限制最多 N 个任务同时进行（常见实现：队列、p-limit、手写 promise pool）。
 // 3. 每个仓库的 pull/clone 操作作为一个 Promise，交给并发池调度。
-const execAsync = util.promisify(exec);
+// 4. 使用 spawn 来流式输出子进程日志并支持超时
+
+// 使用 spawn 来流式输出子进程日志并支持超时
+function runCommandStreaming(
+  command: string,
+  args: string[],
+  cwd: string,
+  timeoutMs: number,
+  prefix: string
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { cwd });
+
+    let lastOutput = Date.now();
+    const startTime = Date.now();
+    const onData = (data: Buffer, streamName: string) => {
+      lastOutput = Date.now();
+      const text = data.toString();
+      // 每行都加前缀，避免大块输出难以区分
+      text.split(/\r?\n/).forEach((line) => {
+        if (line.trim().length > 0) {
+          console.log(`${prefix} ${streamName}: ${line}`);
+        }
+      });
+    };
+
+    // 心跳：如果较长时间没有任何输出，则每隔 heartbeatInterval 打印一次提示
+    const heartbeatInterval = 10000; // 10s
+    const heartbeatTimer = setInterval(() => {
+      // 如果子进程已经结束，lastOutput 会在 close/error 中清除 timer
+      const since = Date.now() - lastOutput;
+      if (since >= heartbeatInterval) {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        console.log(`${prefix} ...still running, no output for ${Math.floor(since / 1000)}s (elapsed ${elapsed}s)`);
+      }
+    }, heartbeatInterval);
+
+    child.stdout.on("data", (d) => onData(d, "stdout"));
+    child.stderr.on("data", (d) => onData(d, "stderr"));
+
+    let killedByTimeout = false;
+    const timer = setTimeout(() => {
+      killedByTimeout = true;
+      // 先尝试正常终止
+      try {
+        child.kill();
+      } catch (e) {
+        // ignore
+      }
+    }, timeoutMs);
+
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      clearInterval(heartbeatTimer);
+      reject(err);
+    });
+
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      clearInterval(heartbeatTimer);
+      if (killedByTimeout) {
+        const err: any = new Error(`timed out after ${timeoutMs}ms`);
+        err.timedOut = true;
+        return reject(err);
+      }
+      if (code === 0) {
+        resolve();
+      } else {
+        const err: any = new Error(`process exited with code ${code}${signal ? `, signal ${signal}` : ''}`);
+        reject(err);
+      }
+    });
+  });
+}
 
 interface RepoConfig {
   username: string;
@@ -127,10 +199,12 @@ export async function autoPullRepository(config: RepoConfig): Promise<void> {
         try {
           if (fs.existsSync(repoPath)) {
             console.log(`  ↳ Updating repository...`);
-            await execAsync("git pull", { cwd: repoPath, timeout: timeoutMs });
+            await runCommandStreaming('git', ['pull'], repoPath, timeoutMs, `(${repoName})`);
             console.log(`  ✓ Updated successfully\n`);
           } else {
-            await execAsync(`git clone ${cloneUrl(repoName)} ${repoPath}`, { timeout: timeoutMs });
+            console.log(`  ↳ Cloning repository...`);
+            // git clone --progress <url> <path> (加 --progress 强制输出进度，即使非交互式)
+            await runCommandStreaming('git', ['clone', '--progress', cloneUrl(repoName), repoPath], BASE_DIR, timeoutMs, `(${repoName})`);
             console.log(`  ✓ Cloned successfully\n`);
           }
         } catch (error: any) {
